@@ -1,0 +1,60 @@
+name: travelio-message-classifier
+
+services:
+  mongo:
+    # MongoDB 5.0+ needs a CPU with AVX. On older CPUs run with MONGO_IMAGE=mongo:4.4.
+    image: ${MONGO_IMAGE:-mongo:7}
+    restart: unless-stopped
+    # Local setup without authentication, so the port is bound to localhost only.
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      # mongosh ships with mongo 5+, the legacy `mongo` shell with 4.4.
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ping: 1}).ok' || mongo --quiet --eval 'db.adminCommand({ping: 1}).ok'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      target: runtime
+    image: travelio-message-classifier:0.1.0
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      REPOSITORY_BACKEND: mongo
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: travelio
+      MONGO_COLLECTION: message_classifications
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: "true"
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-5.0}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      LLM_RETRY_BACKOFF_SECONDS: ${LLM_RETRY_BACKOFF_SECONDS:-0.2}
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.6}
+      TIMEZONE: Asia/Jakarta
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # Full test suite in a clean container, including the MongoDB integration test:
+  #   docker compose --profile test run --rm tests
+  tests:
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
+    environment:
+      MONGO_TEST_URI: mongodb://mongo:27017
+      LOG_JSON: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

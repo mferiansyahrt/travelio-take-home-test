@@ -1,0 +1,10 @@
+# Direct runtime dependencies. The full pinned lock is requirements.txt,
+# regenerated in a clean python:3.11-slim container (see README → "Dependencies").
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.11.4
+pydantic-settings==2.9.1
+loguru==0.7.3
+pymongo==4.18.1
+# zoneinfo data for Asia/Jakarta, independent of the OS image having tzdata installed
+tzdata==2025.2

@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "Entities": {
+      "properties": {
+        "stays": {
+          "items": {
+            "$ref": "#/$defs/Stay"
+          },
+          "title": "Stays",
+          "type": "array"
+        }
+      },
+      "title": "Entities",
+      "type": "object"
+    },
+    "Intent": {
+      "enum": [
+        "booking_inquiry",
+        "maintenance_request",
+        "extension_request",
+        "payment_inquiry",
+        "out_of_scope",
+        "unknown"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "Stay": {
+      "description": "One stay mentioned by the guest. Grouping location, unit and dates per stay keeps\n\"Kemang on the 12th, then Gambir on the 15th\" unambiguous.",
+      "properties": {
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Area, building or city as written by the guest.",
+          "title": "Location"
+        },
+        "unit_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "studio",
+                "1br",
+                "2br",
+                "3br"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit Type"
+        },
+        "check_in": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Check In"
+        },
+        "check_out": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Check-out date; for extension requests, the current check-out.",
+          "title": "Check Out"
+        },
+        "new_check_out": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Extension requests only: the requested later check-out.",
+          "title": "New Check Out"
+        }
+      },
+      "title": "Stay",
+      "type": "object"
+    },
+    "Urgency": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Urgency",
+      "type": "string"
+    }
+  },
+  "description": "Contract for the classifier LLM's JSON answer. Every answer is validated against it.",
+  "properties": {
+    "intent": {
+      "$ref": "#/$defs/Intent"
+    },
+    "entities": {
+      "$ref": "#/$defs/Entities"
+    },
+    "urgency": {
+      "$ref": "#/$defs/Urgency"
+    },
+    "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "needs_human": {
+      "default": false,
+      "title": "Needs Human",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "unrecognized_intent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Set by the service, never by the model: the original intent string when it was outside the enum and mapped to 'unknown'.",
+      "title": "Unrecognized Intent"
+    }
+  },
+  "required": [
+    "intent",
+    "urgency",
+    "confidence"
+  ],
+  "title": "ClassificationOutput",
+  "type": "object"
+}

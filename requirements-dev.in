@@ -1,0 +1,5 @@
+# Direct test dependencies (on top of requirements.in). Full pinned lock: requirements-dev.txt
+-r requirements.in
+pytest==9.0.3
+pytest-asyncio==1.3.0
+httpx==0.28.1
