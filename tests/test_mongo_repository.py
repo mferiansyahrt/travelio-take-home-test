@@ -40,3 +40,30 @@ async def test_record_with_stay_dates_round_trips_through_mongo():
     finally:
         await repository._collection.drop()
         await repository.close()
+
+
+async def test_unrecognized_intent_is_kept_when_read_back_from_mongo():
+    repository = MongoClassificationRepository(MONGO_TEST_URI, "travelio_test", f"classifications_{uuid.uuid4().hex[:8]}")
+    record = ClassificationRecord(
+        id=uuid.uuid4().hex,
+        request_id="test-request",
+        created_at=FIXED_NOW,
+        status="succeeded",
+        message="saya mau komplain",
+        output=ClassificationOutput.model_validate_json(llm_json(intent="complaint")),
+        needs_human_reasons=["unknown_intent"],
+        attempts=1,
+        latency_ms=8.0,
+    )
+
+    try:
+        await repository.save(record)
+
+        reloaded = await repository.get(record.id)
+
+        assert reloaded.output.intent.value == "unknown"
+        assert reloaded.output.unrecognized_intent == "complaint"
+        assert reloaded == record
+    finally:
+        await repository._collection.drop()
+        await repository.close()

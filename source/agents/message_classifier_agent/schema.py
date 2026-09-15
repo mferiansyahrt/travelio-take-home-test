@@ -92,7 +92,10 @@ class ClassificationOutput(BaseModel):
         if not normalized:
             return data
         if normalized in _INTENT_VALUES:
-            return {**data, "intent": normalized, "unrecognized_intent": None}
+            # A stored record reloaded from the database already has intent "unknown" plus the original value:
+            # keep it. For any other valid intent there is nothing unrecognized (and the model can't set this field).
+            unrecognized_intent = data.get("unrecognized_intent") if normalized == Intent.UNKNOWN.value else None
+            return {**data, "intent": normalized, "unrecognized_intent": unrecognized_intent}
         return {**data, "intent": Intent.UNKNOWN.value, "unrecognized_intent": raw_intent}
 
 

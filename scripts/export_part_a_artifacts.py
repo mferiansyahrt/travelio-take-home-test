@@ -1,7 +1,7 @@
 """Regenerate the Part A artifacts from the code, so the docs never drift from what the service actually runs:
 
-- docs/output_schema.json   JSON Schema of the classifier output (from the Pydantic model)
-- docs/prompt_example.txt   the full prompt sent to the LLM for sample message 1
+- docs/part_a/output_schema.json   JSON Schema of the classifier output (from the Pydantic model)
+- docs/part_a/prompt_example.txt   the full prompt sent to the LLM for sample message 1
 
 Usage (from the repo root):  python scripts/export_part_a_artifacts.py
 """
@@ -22,8 +22,8 @@ REFERENCE_TIME = datetime(2026, 9, 15, 10, 0, tzinfo=ZoneInfo("Asia/Jakarta"))
 
 
 def main() -> None:
-    docs_dir = ROOT / "docs"
-    docs_dir.mkdir(exist_ok=True)
+    docs_dir = ROOT / "docs" / "part_a"
+    docs_dir.mkdir(parents=True, exist_ok=True)
 
     schema_path = docs_dir / "output_schema.json"
     schema_path.write_text(json.dumps(ClassificationOutput.model_json_schema(), indent=2) + "\n")

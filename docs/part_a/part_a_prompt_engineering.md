@@ -4,10 +4,10 @@
 
 The shipped prompt lives in code, so the service and this document can't disagree:
 
-- [`source/agents/message_classifier_agent/prompt.py`](../source/agents/message_classifier_agent/prompt.py)
+- [`source/agents/message_classifier_agent/prompt.py`](../../source/agents/message_classifier_agent/prompt.py)
   - `MESSAGE_CLASSIFIER_SYSTEM_PROMPT`: **ROLE / TASK / CONTEXT / OUTPUT FORMAT / EXAMPLES**
   - `MESSAGE_CLASSIFIER_HUMAN_PROMPT`: the per-request **INPUT** (reference datetime, conversation context, guest message)
-- [`docs/prompt_example.txt`](prompt_example.txt): the full prompt exactly as sent to the LLM for sample message 1.
+- [`docs/part_a/prompt_example.txt`](prompt_example.txt): the full prompt exactly as sent to the LLM for sample message 1.
   Regenerate it with `python scripts/export_part_a_artifacts.py`.
 
 Main design choices in the prompt:
@@ -23,7 +23,7 @@ Main design choices in the prompt:
 
 ## 2. JSON output schema
 
-Full JSON Schema, generated from the Pydantic model: [`docs/output_schema.json`](output_schema.json).
+Full JSON Schema, generated from the Pydantic model: [`docs/part_a/output_schema.json`](output_schema.json).
 
 ```json
 {

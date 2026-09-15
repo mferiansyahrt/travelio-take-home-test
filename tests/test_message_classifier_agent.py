@@ -48,6 +48,23 @@ def test_parse_accepts_the_mock_client_entities_shape():
     assert output.entities.stays == []
 
 
+def test_unrecognized_intent_survives_a_store_and_reload_round_trip():
+    output = MessageClassifierAgent.parse_output(llm_json(intent="complaint"))
+
+    # What a database repository does: dump to JSON, validate back into the model.
+    reloaded = ClassificationOutput.model_validate(output.model_dump(mode="json"))
+
+    assert reloaded.intent == Intent.UNKNOWN
+    assert reloaded.unrecognized_intent == "complaint"
+
+
+def test_parse_drops_unrecognized_intent_sent_by_the_model_with_a_valid_intent():
+    output = MessageClassifierAgent.parse_output(llm_json(unrecognized_intent="made-up"))
+
+    assert output.intent == Intent.BOOKING_INQUIRY
+    assert output.unrecognized_intent is None
+
+
 # ── Guardrails ────────────────────────────────────────────────────────────
 @pytest.mark.parametrize(
     ("overrides", "message", "expected_reason"),

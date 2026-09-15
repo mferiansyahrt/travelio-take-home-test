@@ -6,9 +6,11 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field, StringConstraints
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agents.message_classifier_agent import ConversationTurn, Entities, Intent, MessageClassifierAgent, Urgency
 from config import settings
@@ -21,6 +23,9 @@ setup_logger(level=settings.LOG_LEVEL, json_logs=settings.LOG_JSON)
 
 # Caller-supplied request ids end up in logs, so only a short, safe format is accepted.
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+# Error codes for HTTP errors raised by the framework itself (unknown route, wrong method).
+HTTP_ERROR_CODES = {404: "not_found", 405: "method_not_allowed"}
 
 SAMPLE_MESSAGE = "Halo, saya mau booking unit 2BR di Kemang dari tgl 12 sampai 15 Maret, masih ada yg available?"
 
@@ -98,24 +103,41 @@ class ClassifyMessageOutput(BaseModel):
     created_at: datetime
 
 
-class ErrorDetail(BaseModel):
-    code: str
+class FieldError(BaseModel):
+    location: str = Field(examples=["body.message"])
     message: str
 
 
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    fields: list[FieldError] | None = Field(default=None, description="Only for 422: the invalid request fields.")
+
+
 class ErrorOutput(BaseModel):
+    """Body of every error response (4xx and 5xx)."""
+
     error: ErrorDetail
     request_id: str
     id: str | None = None
     attempts: int | None = None
     persisted: bool | None = None
-    # A message we could not classify must still reach a person.
-    needs_human: bool = True
+    # Only on 502/504: a message we could not classify must still reach a person.
+    needs_human: bool | None = None
 
 
-def error_response(status_code: int, code: str, message: str, request_id: str, **fields) -> JSONResponse:
-    body = ErrorOutput(error=ErrorDetail(code=code, message=message), request_id=request_id, **fields)
-    return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
+def error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    request_id: str,
+    *,
+    fields: list[FieldError] | None = None,
+    headers: dict[str, str] | None = None,
+    **extra,
+) -> JSONResponse:
+    body = ErrorOutput(error=ErrorDetail(code=code, message=message, fields=fields), request_id=request_id, **extra)
+    return JSONResponse(status_code=status_code, content=body.model_dump(mode="json", exclude_none=True), headers=headers)
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────
@@ -151,11 +173,33 @@ async def request_logging_middleware(request: Request, call_next):
     return response
 
 
+# ── Error handlers: framework errors use the same ErrorOutput shape ──────
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    fields = [
+        FieldError(location=".".join(str(part) for part in error["loc"]), message=error["msg"])
+        for error in exc.errors()
+    ]
+    return error_response(422, "invalid_request", "The request is invalid.", request.state.request_id, fields=fields)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    return error_response(
+        exc.status_code,
+        HTTP_ERROR_CODES.get(exc.status_code, "http_error"),
+        str(exc.detail),
+        request.state.request_id,
+        headers=exc.headers,
+    )
+
+
 # ── Endpoint: classify message ────────────────────────────────────────────
 @app.post(
     "/classify-message",
     response_model=ClassifyMessageOutput,
     responses={
+        422: {"model": ErrorOutput, "description": "Invalid request body."},
         502: {"model": ErrorOutput, "description": "The LLM kept returning invalid output after all retries."},
         504: {"model": ErrorOutput, "description": "The LLM timed out on every attempt."},
     },
@@ -172,7 +216,7 @@ async def classify_message(
 
     Status codes:
     - `200` classified. Check `needs_human` / `needs_human_reasons` to decide on escalation.
-    - `422` invalid request body.
+    - `422` invalid request body (`error.fields` lists what is wrong).
     - `502` the LLM kept returning invalid output after all retries.
     - `504` the LLM timed out on every attempt.
 
@@ -196,6 +240,7 @@ async def classify_message(
             id=record.id,
             attempts=record.attempts,
             persisted=persisted,
+            needs_human=True,
         )
 
     return ClassifyMessageOutput(
@@ -214,7 +259,7 @@ async def classify_message(
 @app.get(
     "/classifications/{record_id}",
     response_model=ClassificationRecord,
-    responses={404: {"model": ErrorOutput}},
+    responses={404: {"model": ErrorOutput}, 422: {"model": ErrorOutput}},
 )
 async def get_classification(record_id: str, request: Request, processor: MainProcessor = Depends(get_processor)):
     """Fetch a stored classification: input, parsed output, latency, attempts and timestamp."""

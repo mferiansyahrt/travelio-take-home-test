@@ -1,6 +1,7 @@
 import asyncio
 
 from helpers import SAMPLE_BOOKING_MESSAGE, TRUNCATED_MOCK_OUTPUT, llm_json
+from services.swagger_service import app, get_processor
 
 
 # ── Happy path ────────────────────────────────────────────────────────────
@@ -91,12 +92,32 @@ async def test_intent_outside_enum_is_mapped_to_unknown_and_escalated(make_clien
     assert len(llm.prompts) == 1  # a valid-but-unroutable answer is not retried
 
 
-async def test_invalid_request_is_rejected_without_calling_the_llm(make_client):
+async def test_invalid_request_returns_structured_422_without_calling_the_llm(make_client):
     client, llm = make_client([])
 
-    response = await client.post("/classify-message", json={"message": "   "})
+    response = await client.post("/classify-message", json={"message": "   "}, headers={"X-Request-ID": "bad-input-1"})
 
     assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "invalid_request"
+    assert body["error"]["fields"] == [
+        {"location": "body.message", "message": "String should have at least 1 character"}
+    ]
+    assert body["request_id"] == "bad-input-1"
+    assert "detail" not in body
+    assert "needs_human" not in body
+    assert llm.prompts == []
+
+
+async def test_body_that_is_not_json_returns_structured_422(make_client):
+    client, llm = make_client([])
+
+    response = await client.post(
+        "/classify-message", content="not json", headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
     assert llm.prompts == []
 
 
@@ -120,3 +141,34 @@ async def test_unknown_record_returns_404(make_client):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "not_found"
+    assert "needs_human" not in response.json()
+
+
+async def test_unknown_route_and_wrong_method_use_the_same_error_shape(make_client):
+    client, _ = make_client([])
+
+    not_found = await client.get("/no-such-route")
+    wrong_method = await client.get("/classify-message")
+
+    assert not_found.status_code == 404
+    assert not_found.json()["error"]["code"] == "not_found"
+    assert wrong_method.status_code == 405
+    assert wrong_method.json()["error"]["code"] == "method_not_allowed"
+    assert wrong_method.headers["allow"] == "POST"
+
+
+async def test_unexpected_error_returns_structured_500(make_client):
+    class BrokenProcessor:
+        async def process(self, **kwargs):
+            raise RuntimeError("boom")
+
+    client, _ = make_client([])
+    app.dependency_overrides[get_processor] = lambda: BrokenProcessor()
+
+    response = await client.post("/classify-message", json={"message": "halo"})
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"]["code"] == "internal_error"
+    assert "needs_human" not in body
+    assert response.headers["X-Request-ID"] == body["request_id"]
