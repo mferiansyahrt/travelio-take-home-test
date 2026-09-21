@@ -1,4 +1,4 @@
-from .base import ClassificationRecord
+from .base import ApiRequestLog, ClassificationRecord
 
 
 class InMemoryClassificationRepository:
@@ -23,3 +23,16 @@ class InMemoryClassificationRepository:
 
     def __len__(self) -> int:
         return len(self._records)
+
+
+class InMemoryApiRequestLogRepository:
+    """Request log kept in a list, for tests and in-memory runs."""
+
+    def __init__(self):
+        self.logs: list[ApiRequestLog] = []
+
+    async def save(self, log: ApiRequestLog) -> None:
+        self.logs.append(log.model_copy(deep=True))
+
+    async def close(self) -> None:
+        return None

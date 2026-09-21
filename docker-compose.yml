@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     # Local setup without authentication, so the port is bound to localhost only.
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -31,6 +31,7 @@ services:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB_NAME: travelio
       MONGO_COLLECTION: message_classifications
+      MONGO_REQUEST_LOG_COLLECTION: api_requests
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: "true"
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-5.0}

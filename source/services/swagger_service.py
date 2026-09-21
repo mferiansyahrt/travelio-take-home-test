@@ -14,9 +14,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from agents.message_classifier_agent import ConversationTurn, Entities, Intent, MessageClassifierAgent, Urgency
 from config import settings
-from db_clients import ClassificationRecord, build_repository
+from db_clients import ClassificationRecord, build_repository, build_request_log
 from llm_clients import MockLLMClient
 from main_processor import MainProcessor
+from services.api_request_log_middleware import ApiRequestLogMiddleware
 from utils.logger import setup_logger
 
 setup_logger(level=settings.LOG_LEVEL, json_logs=settings.LOG_JSON)
@@ -39,6 +40,12 @@ async def lifespan(app: FastAPI):
         mongo_db_name=settings.MONGO_DB_NAME,
         mongo_collection=settings.MONGO_COLLECTION,
     )
+    app.state.request_log = await build_request_log(
+        settings.REPOSITORY_BACKEND,
+        mongo_uri=settings.MONGO_URI,
+        mongo_db_name=settings.MONGO_DB_NAME,
+        mongo_collection=settings.MONGO_REQUEST_LOG_COLLECTION,
+    )
     agent = MessageClassifierAgent(
         MockLLMClient(),
         timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
@@ -57,6 +64,7 @@ async def lifespan(app: FastAPI):
     yield
 
     await repository.close()
+    await app.state.request_log.close()
     logger.info("service_stopped")
 
 
@@ -171,6 +179,10 @@ async def request_logging_middleware(request: Request, call_next):
 
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+# Added after the middleware above, so it wraps it: it sees the final response, X-Request-ID and 500s included.
+app.add_middleware(ApiRequestLogMiddleware)
 
 
 # ── Error handlers: framework errors use the same ErrorOutput shape ──────

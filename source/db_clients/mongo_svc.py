@@ -1,8 +1,10 @@
+import json
+
 from loguru import logger
 from pymongo import ASCENDING, DESCENDING, AsyncMongoClient
-from pymongo.errors import PyMongoError
+from pymongo.errors import InvalidDocument, PyMongoError, WriteError
 
-from .base import ClassificationRecord
+from .base import ApiRequestLog, ClassificationRecord
 
 
 class MongoClassificationRepository:
@@ -44,6 +46,34 @@ class MongoClassificationRepository:
         except PyMongoError as exc:
             logger.bind(error=str(exc)).warning("mongo_ping_failed")
             return False
+
+    async def close(self) -> None:
+        await self._client.close()
+
+
+class MongoApiRequestLogRepository:
+    """Stores one document per HTTP call in its own collection, next to the classification records."""
+
+    def __init__(self, uri: str, db_name: str, collection_name: str, server_selection_timeout_ms: int = 3000):
+        self._client = AsyncMongoClient(uri, tz_aware=True, serverSelectionTimeoutMS=server_selection_timeout_ms)
+        self._collection = self._client[db_name][collection_name]
+
+    async def init_indexes(self) -> None:
+        await self._collection.create_index([("created_at", DESCENDING)])
+        await self._collection.create_index([("request_id", ASCENDING)])
+
+    async def save(self, log: ApiRequestLog) -> None:
+        document = log.model_dump(mode="json")
+        document["_id"] = document.pop("id")
+        document["created_at"] = log.created_at
+        try:
+            await self._collection.insert_one(document)
+        except (InvalidDocument, WriteError):
+            # A body with keys MongoDB refuses (e.g. "$where") is kept as JSON text rather than lost.
+            for field in ("request_body", "response_body"):
+                if document[field] is not None and not isinstance(document[field], str):
+                    document[field] = json.dumps(document[field], ensure_ascii=False)
+            await self._collection.insert_one(document)
 
     async def close(self) -> None:
         await self._client.close()

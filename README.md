@@ -48,6 +48,7 @@ Request: `{"message": "...", "conversation_context": [{"role": "guest" | "agent"
 - **`needs_human` is decided by the service**, not trusted from the model. It is set on unknown intent, confidence < 0.6, high urgency, an injection pattern, or the model's own flag. The rules only escalate.
 - **Prompt injection:** guest text is delimited and escaped, and a regex guardrail escalates obvious attempts.
 - **Persistence:** successes and failures go through a `ClassificationRepository` protocol (in-memory or MongoDB). A database outage still returns the result, with `persisted: false`.
+- **Request log:** every HTTP call (any path or status) is also stored in a separate `api_requests` collection with its request and response body, so the API's traffic can be audited from MongoDB. Swagger pages and the Docker healthcheck are skipped.
 - **Structured logs:** one JSON line per event (LLM attempt, retry, classification, HTTP request), each with `request_id`. Guest text is never logged.
 - **Tests** swap in a scripted LLM, so the happy path and the failure paths are deterministic. Failure paths covered: timeouts (504), malformed output (502), a hanging LLM, unknown intent, database outage, invalid input.
 

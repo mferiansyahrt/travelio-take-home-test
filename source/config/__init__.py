@@ -40,6 +40,8 @@ class AppConfig(BaseSettings):
     MONGO_URI: str = "mongodb://localhost:27017"
     MONGO_DB_NAME: str = "travelio"
     MONGO_COLLECTION: str = "message_classifications"
+    # Every HTTP call with its request and response body (see services/api_request_log_middleware.py).
+    MONGO_REQUEST_LOG_COLLECTION: str = "api_requests"
 
 
 settings = AppConfig()
